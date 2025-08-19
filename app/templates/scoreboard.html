@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block navigation %}
+<nav class="nav-breadcrumb">
+    <a href="/">Hem</a>
+    <span class="separator">»</span>
+    <strong>Resultattavla</strong>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h2>🏆 Övergripande resultattavla</h2>
+    <div style="font-size: 0.9rem; color: #666;">
+        Grupper rankade efter totalt antal rätta svar
+    </div>
+</div>
+
+{% if overall_teams %}
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-top: 0; display: flex; align-items: center; gap: 0.5rem;">
+        🥇 Team Rankings
+        <span style="font-size: 0.8rem; font-weight: normal; color: #666;">(Overall Performance)</span>
+    </h3>
+
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+            <thead>
+                <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
+                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #ddd;">Rank</th>
+                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #ddd;">Team</th>
+                    <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #ddd;">Correct</th>
+                    <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #ddd;">Incorrect</th>
+                    <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #ddd;">Total</th>
+                    <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #ddd;">Accuracy</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for team_data in overall_teams %}
+                <tr
+                    style="border-bottom: 1px solid #eee; {% if loop.index <= 3 %}background: {% if loop.index == 1 %}#fff9c4{% elif loop.index == 2 %}#f0f0f0{% else %}#ffeaa7{% endif %};{% endif %}">
+                    <td style="padding: 0.75rem; font-weight: bold;">
+                        {% if team_data.rank == 1 %}🥇{% elif team_data.rank == 2 %}🥈{% elif team_data.rank == 3 %}🥉{%
+                        else %}{{ team_data.rank }}{% endif %}
+                    </td>
+                    <td style="padding: 0.75rem; font-weight: 600;">{{ team_data.team.name }}</td>
+                    <td style="padding: 0.75rem; text-align: center; color: #28a745; font-weight: bold;">{{
+                        team_data.total_correct }}</td>
+                    <td style="padding: 0.75rem; text-align: center; color: #dc3545;">{{ team_data.total_incorrect }}
+                    </td>
+                    <td style="padding: 0.75rem; text-align: center; font-weight: bold;">{{ team_data.total_answered }}
+                    </td>
+                    <td style="padding: 0.75rem; text-align: center;">
+                        {% if team_data.total_answered > 0 %}
+                        <span
+                            style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; background: {% if team_data.accuracy >= 80 %}#d4edda{% elif team_data.accuracy >= 60 %}#fff3cd{% else %}#f8d7da{% endif %}; color: {% if team_data.accuracy >= 80 %}#155724{% elif team_data.accuracy >= 60 %}#856404{% else %}#721c24{% endif %};">
+                            {{ "%.1f"|format(team_data.accuracy) }}%
+                        </span>
+                        {% else %}
+                        <span style="color: #666; font-style: italic;">N/A</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card" style="text-align: center; color: #666; margin-bottom: 2rem;">
+    <p>No team scores yet. Teams need to answer some questions first!</p>
+</div>
+{% endif %}
+
+<!-- List-specific scoreboards -->
+{% if list_scoreboards %}
+<div style="margin-top: 3rem;">
+    <h3 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        📋 Scoreboard by List
+        <span style="font-size: 0.8rem; font-weight: normal; color: #666;">(Performance per quiz list)</span>
+    </h3>
+
+    <div class="grid">
+        {% for list_id, scoreboard_data in list_scoreboards.items() %}
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h4 style="margin: 0;">{{ scoreboard_data.list.name }}</h4>
+                <a href="{{ url_for('routes.list_scoreboard', list_id=scoreboard_data.list.id) }}"
+                    style="font-size: 0.8rem; color: #007bff; text-decoration: none; padding: 0.25rem 0.5rem; border: 1px solid #007bff; border-radius: 4px;">
+                    View Details
+                </a>
+            </div>
+
+            {% if scoreboard_data.list.description %}
+            <p style="color: #666; font-size: 0.9rem; margin: 0 0 1rem 0;">{{ scoreboard_data.list.description }}</p>
+            {% endif %}
+
+            {% if scoreboard_data.teams %}
+            <div style="max-height: 300px; overflow-y: auto;">
+                {% for team_data in scoreboard_data.teams[:10] %}
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="{% if team_data.rank <= 3 %}font-weight: bold;{% endif %}">
+                            {% if team_data.rank == 1 %}🥇{% elif team_data.rank == 2 %}🥈{% elif team_data.rank == 3
+                            %}🥉{% else %}{{ team_data.rank }}.{% endif %}
+                        </span>
+                        <span style="font-weight: 500;">{{ team_data.team.name }}</span>
+                    </div>
+                    <div style="display: flex; gap: 1rem; font-size: 0.9rem;">
+                        <span style="color: #28a745; font-weight: bold;">{{ team_data.correct }}</span>
+                        <span style="color: #666;">/{{ team_data.total_clips }}</span>
+                        <span style="color: #666; font-size: 0.8rem;">{{ "%.0f"|format(team_data.accuracy) }}%</span>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if scoreboard_data.teams|length > 10 %}
+                <div style="text-align: center; margin-top: 0.5rem;">
+                    <a href="{{ url_for('routes.list_scoreboard', list_id=scoreboard_data.list.id) }}"
+                        style="font-size: 0.8rem; color: #007bff;">
+                        Show all {{ scoreboard_data.teams|length }} teams →
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <p style="color: #666; font-style: italic; text-align: center; margin: 1rem 0;">No scores for this list yet
+            </p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Quick stats section -->
+{% if overall_teams %}
+<div style="margin-top: 3rem;">
+    <div class="grid">
+        <div class="card" style="text-align: center;">
+            <h4 style="margin-top: 0; color: #007bff;">📊 Quick Stats</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">{{ overall_teams|length }}</div>
+                    <div style="font-size: 0.9rem; color: #666;">Active Teams</div>
+                </div>
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #007bff;">{{ list_scoreboards|length }}
+                    </div>
+                    <div style="font-size: 0.9rem; color: #666;">Quiz Lists</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="text-align: center;">
+            <h4 style="margin-top: 0; color: #dc3545;">🏆 Current Leader</h4>
+            {% if overall_teams %}
+            {% set leader = overall_teams[0] %}
+            <div style="margin-top: 1rem;">
+                <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 0.5rem;">{{ leader.team.name }}</div>
+                <div style="display: flex; justify-content: center; gap: 1rem; font-size: 0.9rem;">
+                    <span style="color: #28a745; font-weight: bold;">{{ leader.total_correct }} correct</span>
+                    {% if leader.total_answered > 0 %}
+                    <span style="color: #666;">{{ "%.1f"|format(leader.accuracy) }}% accuracy</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -559,3 +559,160 @@ def clear_team_list_scores(list_id, team_id):
         flash("No scores to clear", "info")
 
     return redirect(url_for("routes.view_list", list_id=list_id))
+
+
+@bp.route("/scoreboard")
+def scoreboard():
+    """Overall scoreboard showing teams ranked by total correct answers"""
+    teams = Team.query.all()
+
+    # Calculate scores for each team across all lists
+    team_stats = []
+    for team in teams:
+        total_correct = Answer.query.filter_by(team_id=team.id, is_correct=True).count()
+        total_incorrect = Answer.query.filter_by(
+            team_id=team.id, is_correct=False
+        ).count()
+        total_answered = total_correct + total_incorrect
+
+        # Calculate accuracy percentage
+        accuracy = (total_correct / total_answered * 100) if total_answered > 0 else 0
+
+        team_stats.append(
+            {
+                "team": team,
+                "total_correct": total_correct,
+                "total_incorrect": total_incorrect,
+                "total_answered": total_answered,
+                "accuracy": accuracy,
+            }
+        )
+
+    # Sort by total correct answers (descending), then by accuracy
+    team_stats.sort(key=lambda x: (x["total_correct"], x["accuracy"]), reverse=True)
+
+    # Add ranking
+    for i, stats in enumerate(team_stats):
+        stats["rank"] = i + 1
+
+    # Get list-specific scoreboards as well
+    lists = SoundList.query.all()
+    list_scoreboards = {}
+
+    for lst in lists:
+        # Get clips for this list
+        clip_ids = [clip.id for clip in lst.clips]
+        if not clip_ids:
+            continue
+
+        list_team_stats = []
+        for team in teams:
+            list_correct = Answer.query.filter(
+                Answer.team_id == team.id,
+                Answer.clip_id.in_(clip_ids),
+                Answer.is_correct == True,
+            ).count()
+
+            list_incorrect = Answer.query.filter(
+                Answer.team_id == team.id,
+                Answer.clip_id.in_(clip_ids),
+                Answer.is_correct == False,
+            ).count()
+
+            list_answered = list_correct + list_incorrect
+            list_accuracy = (
+                (list_correct / list_answered * 100) if list_answered > 0 else 0
+            )
+
+            if list_answered > 0:  # Only include teams that have answered questions
+                list_team_stats.append(
+                    {
+                        "team": team,
+                        "correct": list_correct,
+                        "incorrect": list_incorrect,
+                        "answered": list_answered,
+                        "accuracy": list_accuracy,
+                        "total_clips": len(clip_ids),
+                    }
+                )
+
+        # Sort by correct answers, then by accuracy
+        list_team_stats.sort(key=lambda x: (x["correct"], x["accuracy"]), reverse=True)
+
+        # Add ranking
+        for i, stats in enumerate(list_team_stats):
+            stats["rank"] = i + 1
+
+        list_scoreboards[lst.id] = {"list": lst, "teams": list_team_stats}
+
+    return render_template(
+        "scoreboard.html", overall_teams=team_stats, list_scoreboards=list_scoreboards
+    )
+
+
+@bp.route("/scoreboard/list/<int:list_id>")
+def list_scoreboard(list_id):
+    """Detailed scoreboard for a specific list"""
+    lst = SoundList.query.get_or_404(list_id)
+    clips = (
+        SoundClip.query.filter_by(list_id=list_id)
+        .order_by(SoundClip.created_at.desc())
+        .all()
+    )
+    teams = Team.query.all()
+
+    # Build detailed scoreboard with per-clip results
+    team_results = []
+    for team in teams:
+        team_data = {
+            "team": team,
+            "clip_results": {},
+            "total_correct": 0,
+            "total_incorrect": 0,
+            "total_answered": 0,
+        }
+
+        # Get all answers for this team on this list
+        answers = Answer.query.filter(
+            Answer.team_id == team.id, Answer.clip_id.in_([clip.id for clip in clips])
+        ).all()
+
+        # Create a lookup for answers by clip_id
+        answer_lookup = {answer.clip_id: answer for answer in answers}
+
+        # Process each clip
+        for clip in clips:
+            if clip.id in answer_lookup:
+                answer = answer_lookup[clip.id]
+                team_data["clip_results"][clip.id] = {
+                    "is_correct": answer.is_correct,
+                    "notes": answer.notes,
+                    "submitted_at": answer.submitted_at,
+                }
+                if answer.is_correct:
+                    team_data["total_correct"] += 1
+                else:
+                    team_data["total_incorrect"] += 1
+                team_data["total_answered"] += 1
+            else:
+                team_data["clip_results"][clip.id] = None  # Not answered
+
+        # Calculate accuracy
+        team_data["accuracy"] = (
+            team_data["total_correct"] / team_data["total_answered"] * 100
+            if team_data["total_answered"] > 0
+            else 0
+        )
+
+        team_results.append(team_data)
+
+    # Sort teams by score (correct answers), then by accuracy
+    team_results.sort(key=lambda x: (x["total_correct"], x["accuracy"]), reverse=True)
+
+    # Add ranking
+    for i, team_data in enumerate(team_results):
+        team_data["rank"] = i + 1
+
+    return render_template(
+        "list_scoreboard.html", lst=lst, clips=clips, team_results=team_results
+    )

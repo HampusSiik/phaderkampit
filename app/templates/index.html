@@ -9,91 +9,98 @@
 {% block content %}
 <div class="grid">
     <div class="card">
-        <h2>Create list</h2>
+        <h2>Skapa lista</h2>
         <form action="/lists" method="post">
-            <label for="name">Name</label>
-            <input type="text" name="name" id="name" required />
-            <label for="description">Description</label>
-            <textarea name="description" id="description" rows="3"></textarea>
-            <button type="submit">Create</button>
+            <label for="name">Listnamn</label>
+            <input type="text" name="name" id="name" required placeholder="t.ex. Chalmers IT-ljud" />
+            <label for="description">Beskrivning</label>
+            <textarea name="description" id="description" rows="3"
+                placeholder="t.ex. Ljud från IT-världen, gamla mems, eller kända citat..."></textarea>
+            <button type="submit">Skapa lista</button>
         </form>
     </div>
 
     <div class="card">
-        <h2>Create team</h2>
+        <h2>Skapa phadder grupp</h2>
         <form action="/teams" method="post">
-            <label for="team-name">Name</label>
-            <input type="text" name="name" id="team-name" required />
-            <button type="submit">Create</button>
+            <label for="team-name">Gruppnamn</label>
+            <input type="text" name="name" id="team-name" required placeholder="t.ex. IT-spakarna 2025" />
+            <button type="submit">Skapa grupp</button>
         </form>
     </div>
 </div>
 
-<h2 style="margin-top: 2rem;">📋 Lists{% if lists %} ({{ lists|length }}){% endif %}</h2>
+<h2 style="margin-top: 2rem;">📋 Listor{% if lists %} ({{ lists|length }}){% endif %}</h2>
 <div class="grid">
     {% for lst in lists %}
     <div class="card">
         <h3><a href="/lists/{{ lst.id }}" style="color: #007bff; text-decoration: none;">{{ lst.name }}</a></h3>
-        <p>{{ lst.description or "No description" }}</p>
+        <p>{{ lst.description or "Ingen beskrivning" }}</p>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
-            <small style="color: #666;">Created {{ lst.created_at.strftime('%b %d, %Y') }}</small>
+            <small style="color: #666;">Skapad {{ lst.created_at.strftime('%d %b, %Y') }}</small>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
                 <a href="/lists/{{ lst.id }}"
-                    style="padding: 0.25rem 0.75rem; background: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 0.85rem;">Open
+                    style="padding: 0.25rem 0.75rem; background: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 0.85rem;">Öppna
                     →</a>
                 <button data-action="clear-list-scores" data-id="{{ lst.id }}" data-name="{{ lst.name }}"
                     style="padding: 0.25rem 0.5rem; background: #ffc107; color: #212529; border: none; border-radius: 4px; font-size: 0.75rem; cursor: pointer;"
-                    title="Clear all scores for this list">🧹</button>
+                    title="Rensa alla poäng för denna lista">🧹</button>
                 <button data-action="delete-list" data-id="{{ lst.id }}" data-name="{{ lst.name }}"
                     style="padding: 0.25rem 0.5rem; background: #dc3545; color: white; border: none; border-radius: 4px; font-size: 0.75rem; cursor: pointer;"
-                    title="Delete this list and all its clips">🗑️</button>
+                    title="Ta bort denna lista och alla dess ljud">🗑️</button>
             </div>
         </div>
     </div>
     {% else %}
     <div class="card" style="background: #f8f9fa; border: 2px dashed #dee2e6;">
-        <h3 style="color: #6c757d;">No lists yet</h3>
-        <p style="color: #6c757d; margin: 0;">Create your first list using the form above to get started!</p>
+        <h3 style="color: #6c757d;">Inga listor ännu</h3>
+        <p style="color: #6c757d; margin: 0;">Skapa din första lista med formuläret ovan för att komma igång!</p>
     </div>
     {% endfor %}
 </div>
 
-<h2 style="margin-top: 2rem;">👥 Teams{% if teams %} ({{ teams|length }}){% endif %}</h2>
+<h2 style="margin-top: 2rem;">👥 Phadder grupper{% if teams %} ({{ teams|length }}){% endif %}</h2>
 <div class="grid">
     {% for team in teams %}
     <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div style="flex: 1;">
                 <h3>{{ team.name }}</h3>
-                <small style="color: #666;">Created {{ team.created_at.strftime('%b %d, %Y') }}</small>
+                <small style="color: #666;">Skapad {{ team.created_at.strftime('%d %b, %Y') }}</small>
             </div>
             <div style="display: flex; gap: 0.25rem;">
                 <button data-action="clear-team-scores" data-id="{{ team.id }}" data-name="{{ team.name }}"
                     style="padding: 0.25rem 0.5rem; background: #ffc107; color: #212529; border: none; border-radius: 4px; font-size: 0.75rem; cursor: pointer;"
-                    title="Clear all scores for this team">🧹</button>
+                    title="Rensa alla poäng för denna grupp">🧹</button>
                 <button data-action="delete-team" data-id="{{ team.id }}" data-name="{{ team.name }}"
                     style="padding: 0.25rem 0.5rem; background: #dc3545; color: white; border: none; border-radius: 4px; font-size: 0.75rem; cursor: pointer;"
-                    title="Delete this team">🗑️</button>
+                    title="Ta bort denna grupp">🗑️</button>
             </div>
         </div>
     </div>
     {% else %}
     <div class="card" style="background: #f8f9fa; border: 2px dashed #dee2e6;">
-        <h3 style="color: #6c757d;">No teams yet</h3>
-        <p style="color: #6c757d; margin: 0;">Create teams using the form above, then add them to lists for scoring!</p>
+        <h3 style="color: #6c757d;">Inga grupper ännu</h3>
+        <p style="color: #6c757d; margin: 0;">Skapa phadder grupper med formuläret ovan, sedan lägg till dem i listor
+            för tävling!</p>
     </div>
     {% endfor %}
 </div>
 
 {% if lists and teams %}
 <div class="card" style="margin-top: 2rem; background: #e7f3ff; border: 1px solid #b8daff; text-align: center;">
-    <h4 style="color: #004085;">🚀 Ready to Go!</h4>
-    <p style="color: #004085; margin-bottom: 1rem;">You have {{ lists|length }} list{{ 's' if lists|length != 1 else ''
-        }} and {{ teams|length }} team{{ 's' if teams|length != 1 else '' }} ready.</p>
-    <p style="color: #004085; margin: 0;">Click on any list above to upload audio clips and start recording answers!</p>
+    <h4 style="color: #004085;">🚀 Redo att köra!</h4>
+    <p style="color: #004085; margin-bottom: 1rem;">Du har {{ lists|length }} lista{{ 'r' if lists|length != 1 else ''
+        }} och {{ teams|length }} grupp{{ 'er' if teams|length != 1 else '' }} redo.</p>
+    <p style="color: #004085; margin: 0;">Klicka på någon lista ovan för att ladda upp ljudklipp och börja spela!</p>
+    <div style="margin-top: 1rem;">
+        <a href="{{ url_for('routes.scoreboard') }}"
+            style="padding: 0.5rem 1rem; background: #007bff; color: white; text-decoration: none; border-radius: 4px; display: inline-block;">
+            🏆 Visa resultattavla
+        </a>
+    </div>
 </div>
 {% endif %}
-
 <script>
     // Event delegation for delete/clear buttons
     document.addEventListener('click', function (e) {
@@ -122,7 +129,7 @@
 
     // Confirmation dialogs for destructive actions
     function confirmDeleteList(listId, listName) {
-        if (confirm(`Are you sure you want to delete the list "${listName}"?\n\nThis will permanently delete:\n• The list\n• All audio clips in the list\n• All scores for all teams on this list\n• All audio files from disk\n\nThis action cannot be undone!`)) {
+        if (confirm(`Är du säker på att du vill ta bort listan "${listName}"?\n\nDetta kommer permanent ta bort:\n• Listan\n• Alla ljudklipp i listan\n• Alla poäng för alla grupper på denna lista\n• Alla ljudfiler från disken\n\nDenna åtgärd kan inte ångras!`)) {
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = `/lists/${listId}/delete`;
@@ -132,7 +139,7 @@
     }
 
     function confirmClearListScores(listId, listName) {
-        if (confirm(`Clear all scores for the list "${listName}"?\n\nThis will delete all recorded answers from all teams for this list.\nThe list and clips will remain, but all scoring data will be lost.\n\nThis action cannot be undone!`)) {
+        if (confirm(`Rensa alla poäng för listan "${listName}"?\n\nDetta kommer ta bort alla inspelade svar från alla grupper för denna lista.\nListan och klippen kommer att finnas kvar, men all poängdata kommer att försvinna.\n\nDenna åtgärd kan inte ångras!`)) {
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = `/lists/${listId}/clear-scores`;
@@ -142,7 +149,7 @@
     }
 
     function confirmDeleteTeam(teamId, teamName) {
-        if (confirm(`Are you sure you want to delete the team "${teamName}"?\n\nThis will permanently delete:\n• The team\n• All scores recorded by this team\n\nThis action cannot be undone!`)) {
+        if (confirm(`Är du säker på att du vill ta bort gruppen "${teamName}"?\n\nDetta kommer permanent ta bort:\n• Gruppen\n• Alla poäng som denna grupp har spelat in\n\nDenna åtgärd kan inte ångras!`)) {
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = `/teams/${teamId}/delete`;
@@ -152,7 +159,7 @@
     }
 
     function confirmClearTeamScores(teamId, teamName) {
-        if (confirm(`Clear all scores for the team "${teamName}"?\n\nThis will delete all recorded answers by this team across all lists.\nThe team will remain, but all scoring data will be lost.\n\nThis action cannot be undone!`)) {
+        if (confirm(`Rensa alla poäng för gruppen "${teamName}"?\n\nDetta kommer ta bort alla inspelade svar från denna grupp över alla listor.\nGruppen kommer att finnas kvar, men all poängdata kommer att försvinna.\n\nDenna åtgärd kan inte ångras!`)) {
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = `/teams/${teamId}/clear-scores`;

@@ -52,15 +52,21 @@ make dev
 
 ### Option 2: Docker Deployment
 
-Run the containerized stack:
+**Development with Docker:**
 
 ```bash
-# Using Docker Compose
-make docker-run
-
-# Or manually
-docker compose up --build
+make docker-dev
 ```
+
+**Production with Unix Socket:**
+
+```bash
+make prod-deploy
+```
+
+The production deployment creates a Unix socket at `/tmp/phaderkampit.sock` for use with nginx/apache reverse proxy.
+
+See [DOCKER.md](DOCKER.md) for detailed Docker deployment instructions.
 
 ### Available Commands
 
@@ -81,9 +87,16 @@ make quickstart     # Complete setup and run
 make db-init        # Initialize database
 make db-reset       # Reset database
 
-# Docker
-make docker-run     # Build and run with Docker
+# Docker (Recommended - Auto-rebuilds)
+make run-docker     # Main: Auto-rebuild and run in development mode
+make run-docker-prod # Main: Auto-rebuild and run in production mode
+make smart-run      # Auto-detect Docker/local and run appropriately
+make docker-watch   # Run with automatic rebuilds on file changes
+make docker-fresh   # Clean start: remove everything and rebuild
+make docker-test    # Test Docker configuration
+make prod-status    # Check production deployment status
 make docker-stop    # Stop containers
+make docker-logs    # View container logs
 
 # Utilities
 make status         # Check if app is working

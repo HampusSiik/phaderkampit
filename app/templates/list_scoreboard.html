@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block navigation %}
+<nav class="nav-breadcrumb">
+    <a href="/">Home</a>
+    <span class="separator">»</span>
+    <a href="{{ url_for('routes.scoreboard') }}">Scoreboard</a>
+    <span class="separator">»</span>
+    <strong>{{ lst.name }}</strong>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div>
+        <h2 style="margin: 0;">🏆 {{ lst.name }} Scoreboard</h2>
+        {% if lst.description %}
+        <p style="color: #666; margin: 0.5rem 0 0 0;">{{ lst.description }}</p>
+        {% endif %}
+    </div>
+    <div style="display: flex; gap: 1rem;">
+        <a href="{{ url_for('routes.view_list', list_id=lst.id) }}" class="back-link" style="margin: 0;">View List</a>
+        <a href="{{ url_for('routes.scoreboard') }}" class="back-link" style="margin: 0;">All Scoreboards</a>
+    </div>
+</div>
+
+{% if team_results %}
+<!-- Summary scoreboard -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-top: 0; display: flex; align-items: center; gap: 0.5rem;">
+        🥇 Team Rankings
+        <span style="font-size: 0.8rem; font-weight: normal; color: #666;">({{ clips|length }} clips total)</span>
+    </h3>
+
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
+                    <th style="padding: 0.75rem; text-align: left;">Rank</th>
+                    <th style="padding: 0.75rem; text-align: left;">Team</th>
+                    <th style="padding: 0.75rem; text-align: center;">Correct</th>
+                    <th style="padding: 0.75rem; text-align: center;">Incorrect</th>
+                    <th style="padding: 0.75rem; text-align: center;">Unanswered</th>
+                    <th style="padding: 0.75rem; text-align: center;">Progress</th>
+                    <th style="padding: 0.75rem; text-align: center;">Accuracy</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for team_data in team_results %}
+                {% set unanswered = clips|length - team_data.total_answered %}
+                {% set progress_percent = (team_data.total_answered / clips|length * 100) if clips|length > 0 else 0 %}
+                <tr
+                    style="border-bottom: 1px solid #eee; {% if loop.index <= 3 %}background: {% if loop.index == 1 %}#fff9c4{% elif loop.index == 2 %}#f0f0f0{% else %}#ffeaa7{% endif %};{% endif %}">
+                    <td style="padding: 0.75rem; font-weight: bold;">
+                        {% if team_data.rank == 1 %}🥇{% elif team_data.rank == 2 %}🥈{% elif team_data.rank == 3 %}🥉{%
+                        else %}{{ team_data.rank }}{% endif %}
+                    </td>
+                    <td style="padding: 0.75rem; font-weight: 600;">{{ team_data.team.name }}</td>
+                    <td style="padding: 0.75rem; text-align: center; color: #28a745; font-weight: bold;">{{
+                        team_data.total_correct }}</td>
+                    <td style="padding: 0.75rem; text-align: center; color: #dc3545;">{{ team_data.total_incorrect }}
+                    </td>
+                    <td style="padding: 0.75rem; text-align: center; color: #6c757d;">{{ unanswered }}</td>
+                    <td style="padding: 0.75rem; text-align: center;">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                            <div
+                                style="width: 60px; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden;">
+                                <div
+                                    style="width: {{ progress_percent }}%; height: 100%; background: {% if progress_percent >= 100 %}#28a745{% elif progress_percent >= 75 %}#ffc107{% else %}#17a2b8{% endif %}; transition: width 0.3s;">
+                                </div>
+                            </div>
+                            <span style="font-size: 0.8rem; color: #666; min-width: 35px;">{{
+                                "%.0f"|format(progress_percent) }}%</span>
+                        </div>
+                    </td>
+                    <td style="padding: 0.75rem; text-align: center;">
+                        {% if team_data.total_answered > 0 %}
+                        <span
+                            style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; background: {% if team_data.accuracy >= 80 %}#d4edda{% elif team_data.accuracy >= 60 %}#fff3cd{% else %}#f8d7da{% endif %}; color: {% if team_data.accuracy >= 80 %}#155724{% elif team_data.accuracy >= 60 %}#856404{% else %}#721c24{% endif %};">
+                            {{ "%.1f"|format(team_data.accuracy) }}%
+                        </span>
+                        {% else %}
+                        <span style="color: #666; font-style: italic;">N/A</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Detailed per-clip results -->
+<div class="card">
+    <h3 style="margin-top: 0; display: flex; align-items: center; gap: 0.5rem;">
+        📋 Detailed Results
+        <span style="font-size: 0.8rem; font-weight: normal; color: #666;">(Performance per clip)</span>
+    </h3>
+
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead>
+                <tr style="background: #f8f9fa;">
+                    <th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid #ddd; min-width: 120px;">Team
+                    </th>
+                    {% for clip in clips %}
+                    <th
+                        style="padding: 0.5rem; text-align: center; border-bottom: 1px solid #ddd; min-width: 80px; writing-mode: vertical-lr; text-orientation: mixed; height: 120px; vertical-align: bottom;">
+                        <div
+                            style="transform: rotate(180deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15px;">
+                            {{ clip.title[:20] }}{% if clip.title|length > 20 %}...{% endif %}
+                        </div>
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for team_data in team_results %}
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 0.5rem; font-weight: 600; background: #f8f9fa;">{{ team_data.team.name }}</td>
+                    {% for clip in clips %}
+                    <td style="padding: 0.5rem; text-align: center; border-left: 1px solid #eee;">
+                        {% if team_data.clip_results[clip.id] %}
+                        {% set result = team_data.clip_results[clip.id] %}
+                        <span style="font-size: 1.2rem;"
+                            title="{% if result.is_correct %}Correct{% else %}Incorrect{% endif %}{% if result.notes %} - {{ result.notes }}{% endif %} ({{ result.submitted_at.strftime('%m/%d %H:%M') }})">
+                            {% if result.is_correct %}✅{% else %}❌{% endif %}
+                        </span>
+                        {% else %}
+                        <span style="color: #ccc; font-size: 1.2rem;" title="Not answered">⭕</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee; font-size: 0.8rem; color: #666;">
+        <strong>Legend:</strong>
+        <span style="margin-right: 1rem;">✅ Correct</span>
+        <span style="margin-right: 1rem;">❌ Incorrect</span>
+        <span>⭕ Not answered</span>
+        <span style="margin-left: 1rem; font-style: italic;">Hover over icons for details and timestamps</span>
+    </div>
+</div>
+
+{% else %}
+<div class="card" style="text-align: center; color: #666;">
+    <h3>No Results Yet</h3>
+    <p>Teams haven't answered any questions for this list yet.</p>
+    <a href="{{ url_for('routes.view_list', list_id=lst.id) }}" style="color: #007bff; text-decoration: none;">Go to
+        list to start recording answers →</a>
+</div>
+{% endif %}
+
+<!-- Quick stats for this list -->
+{% if clips %}
+<div style="margin-top: 2rem;">
+    <div class="grid">
+        <div class="card" style="text-align: center;">
+            <h4 style="margin-top: 0; color: #007bff;">📊 List Stats</h4>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1rem;">
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">{{ clips|length }}</div>
+                    <div style="font-size: 0.9rem; color: #666;">Total Clips</div>
+                </div>
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #007bff;">{{ team_results|length }}</div>
+                    <div style="font-size: 0.9rem; color: #666;">Teams</div>
+                </div>
+                <div>
+                    {% set total_answers = team_results|map(attribute='total_answered')|sum %}
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #6f42c1;">{{ total_answers }}</div>
+                    <div style="font-size: 0.9rem; color: #666;">Total Answers</div>
+                </div>
+            </div>
+        </div>
+
+        {% if team_results and team_results[0].total_answered > 0 %}
+        <div class="card" style="text-align: center;">
+            <h4 style="margin-top: 0; color: #dc3545;">🏆 List Leader</h4>
+            {% set leader = team_results[0] %}
+            <div style="margin-top: 1rem;">
+                <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 0.5rem;">{{ leader.team.name }}</div>
+                <div style="display: flex; justify-content: center; gap: 1rem; font-size: 0.9rem;">
+                    <span style="color: #28a745; font-weight: bold;">{{ leader.total_correct }}/{{ clips|length
+                        }}</span>
+                    <span style="color: #666;">{{ "%.1f"|format(leader.accuracy) }}%</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

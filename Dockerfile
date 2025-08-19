@@ -11,6 +11,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files
@@ -21,15 +22,16 @@ COPY . /app
 RUN python -m pip install --upgrade pip && \
     pip install -e .
 
-# Create data volume mount point
+# Create data volume mount point and socket directory
 VOLUME ["/data/uploads"]
+RUN mkdir -p /tmp && chmod 755 /tmp
 
-# Expose port
+# Expose port (for development, but production uses socket)
 EXPOSE 8000
 
 # Default envs
 ENV FLASK_ENV=production \
     UPLOAD_FOLDER=/data/uploads
 
-# Start with gunicorn
-CMD ["gunicorn", "-b", "0.0.0.0:8000", "main:app"]
+# Start with gunicorn using Unix socket
+CMD ["gunicorn", "--bind", "unix:/tmp/phaderkampit.sock", "--workers", "4", "--worker-class", "sync", "--timeout", "120", "main:app"]

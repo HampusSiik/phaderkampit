@@ -92,15 +92,120 @@ test-nav: install ## Test navigation improvements
 docker-build: ## Build Docker image
 	docker build -t phaderkampit .
 
-docker-run: docker-build ## Build and run Docker container
-	docker compose up --build
+docker-dev: ## Run Docker in development mode (with port 8000)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+
+docker-prod: ## Run Docker in production mode (with Unix socket)
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+
+docker-run: docker-auto-dev ## Build and run Docker container (development mode with auto-rebuild)
+
+run-docker: docker-auto-dev ## Main command: Auto-rebuild and run in development mode
+
+run-docker-prod: docker-auto-prod ## Main command: Auto-rebuild and run in production mode
+
+# Smart run command that detects Docker preference
+smart-run: ## Smart run: Uses Docker if available, falls back to local development
+	@echo "🤖 Smart run: detecting best method..."
+	@if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then \
+		echo "🐳 Docker detected, using containerized development..."; \
+		$(MAKE) run-docker; \
+	else \
+		echo "💻 Docker not available, using local development..."; \
+		$(MAKE) dev; \
+	fi
 
 docker-stop: ## Stop Docker containers
 	docker compose down
 
+docker-logs: ## Show Docker container logs
+	docker compose logs -f
+
+docker-shell: ## Open shell in running container
+	docker compose exec web bash
+
 docker-clean: ## Remove Docker containers and images
 	docker compose down -v
 	docker rmi phaderkampit 2>/dev/null || true
+
+docker-test: ## Test Docker configuration
+	@echo "🧪 Testing Docker setup..."
+	@python3 test_docker.py
+
+# Auto-rebuild and run commands
+docker-auto-dev: ## Auto-rebuild and run in development mode (stops existing containers first)
+	@echo "🚀 Auto-rebuilding and running in development mode..."
+	@docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true
+	@docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build --force-recreate
+
+docker-auto-prod: ## Auto-rebuild and run in production mode (stops existing containers first)
+	@echo "🚀 Auto-rebuilding and deploying in production mode..."
+	@docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
+	@docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build --force-recreate -d
+	@echo "✅ Production deployment complete with auto-rebuild!"
+	@echo "📁 Socket available at: /tmp/phaderkampit.sock"
+
+docker-fresh: docker-clean docker-auto-dev ## Complete fresh start: clean everything and rebuild from scratch
+
+docker-watch: ## Run in development mode with automatic rebuilds on file changes
+	@echo "👀 Starting development mode with file watching..."
+	@echo "⚡ Will automatically rebuild when files change"
+	@echo "🛑 Press Ctrl+C to stop"
+	@if command -v inotifywait >/dev/null 2>&1; then \
+		echo "📁 Using inotifywait for efficient file monitoring"; \
+		while true; do \
+			echo ""; \
+			echo "🔄 Starting/restarting containers..."; \
+			docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true; \
+			docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build --force-recreate & \
+			COMPOSE_PID=$$!; \
+			echo "📊 Containers running (PID: $$COMPOSE_PID)"; \
+			echo "🌐 App should be available at http://localhost:8000"; \
+			echo "⏳ Watching for file changes..."; \
+			inotifywait -r -e modify,create,delete,move --exclude='(__pycache__|\.pyc|\.git|uploads|\.env)' . 2>/dev/null; \
+			echo ""; \
+			echo "🔄 Files changed, rebuilding..."; \
+			kill $$COMPOSE_PID 2>/dev/null || true; \
+			sleep 2; \
+		done; \
+	else \
+		echo "📁 Using basic polling (install inotify-tools for better performance)"; \
+		while true; do \
+			echo ""; \
+			echo "🔄 Starting/restarting containers..."; \
+			docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null || true; \
+			docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build --force-recreate & \
+			COMPOSE_PID=$$!; \
+			echo "📊 Containers running (PID: $$COMPOSE_PID)"; \
+			echo "🌐 App should be available at http://localhost:8000"; \
+			echo "⏳ Will check for changes every 30 seconds..."; \
+			sleep 30; \
+			echo "🔄 Periodic rebuild (install inotify-tools for change detection)"; \
+			kill $$COMPOSE_PID 2>/dev/null || true; \
+			sleep 2; \
+		done; \
+	fi
+
+# Production deployment commands
+prod-deploy: ## Deploy in production mode with Unix socket
+	@echo "🚀 Deploying phaderkampit in production mode..."
+	@echo "📁 Socket will be available at: /tmp/phaderkampit.sock"
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+	@echo "✅ Production deployment complete!"
+	@echo "📝 Configure your reverse proxy (nginx/apache) to proxy to unix:/tmp/phaderkampit.sock"
+
+prod-status: ## Check production deployment status
+	@echo "🔍 Production status:"
+	@if [ -S /tmp/phaderkampit.sock ]; then \
+		echo "✅ Socket file exists: /tmp/phaderkampit.sock"; \
+		stat /tmp/phaderkampit.sock; \
+	else \
+		echo "❌ Socket file not found: /tmp/phaderkampit.sock"; \
+	fi
+	@docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+
+prod-stop: ## Stop production deployment
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 
 # Database commands
 db-init: install ## Initialize the database

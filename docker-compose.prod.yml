@@ -1,0 +1,6 @@
+services:
+  web:
+    command: ["sh", "-c", "rm -f /tmp/phaderkampit.sock && gunicorn --bind unix:/tmp/phaderkampit.sock --workers 4 --worker-class sync --timeout 120 --umask 0 main:app"]
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=production

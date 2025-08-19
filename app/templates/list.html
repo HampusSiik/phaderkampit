@@ -30,47 +30,44 @@
         <h3>Upload clip</h3>
 
         <!-- Tab switching for upload methods -->
-        <div style="margin-bottom: 1rem;">
-            <button type="button" onclick="showUploadTab('file')" id="file-tab"
-                style="padding: 0.5rem 1rem; background: #007bff; color: white; border: none; border-radius: 4px 0 0 4px; cursor: pointer;">📁
-                File Upload</button>
-            <button type="button" onclick="showUploadTab('url')" id="url-tab"
-                style="padding: 0.5rem 1rem; background: #6c757d; color: white; border: none; border-radius: 0 4px 4px 0; cursor: pointer;">🔗
-                URL</button>
+        <div class="upload-tabs">
+            <button type="button" onclick="showUploadTab('file')" id="file-tab" class="upload-tab active">📁 File
+                Upload</button>
+            <button type="button" onclick="showUploadTab('url')" id="url-tab" class="upload-tab">🔗 URL</button>
         </div>
 
         <!-- File upload form -->
         <form action="/clips/upload/{{ lst.id }}" method="post" enctype="multipart/form-data" id="file-form">
-            <label for="title">Title</label>
-            <input name="title" id="title" type="text" placeholder="Optional title" />
-            <label for="description">Description</label>
-            <textarea name="description" id="description" rows="3" placeholder="Optional description"></textarea>
-            <label for="file">Audio file</label>
+            <label for="title">Titel</label>
+            <input name="title" id="title" type="text" placeholder="Valfri titel" />
+            <label for="description">Beskrivning</label>
+            <textarea name="description" id="description" rows="3" placeholder="Valfri beskrivning"></textarea>
+            <label for="file">Ljudfil 🎵</label>
             <input name="file" id="file" type="file" accept="audio/*" required />
-            <button type="submit">Upload</button>
+            <button type="submit">Ladda upp</button>
         </form>
 
         <!-- URL upload form -->
         <form action="/clips/upload-url/{{ lst.id }}" method="post" id="url-form" style="display: none;">
-            <label for="url-title">Title</label>
-            <input name="title" id="url-title" type="text" placeholder="Optional title" />
-            <label for="url-description">Description</label>
-            <textarea name="description" id="url-description" rows="3" placeholder="Optional description"></textarea>
-            <label for="url">Audio URL</label>
+            <label for="url-title">Titel</label>
+            <input name="title" id="url-title" type="text" placeholder="Valfri titel" />
+            <label for="url-description">Beskrivning</label>
+            <textarea name="description" id="url-description" rows="3" placeholder="Valfri beskrivning"></textarea>
+            <label for="url">Ljud-URL 🌐</label>
             <input name="url" id="url" type="url" placeholder="https://example.com/audio.ogg" required />
-            <button type="button" onclick="previewUrl()" style="background: #17a2b8; color: white;">🎵 Preview &
-                Convert</button>
+            <button type="button" onclick="previewUrl()" style="background: #17a2b8; color: white;">🎵 Förhandsgranska &
+                Konvertera</button>
 
             <!-- Preview area -->
             <div id="preview-area"
-                style="display: none; margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
-                <h4>Preview</h4>
+                style="display: none; margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
+                <h4>Förhandsgranska</h4>
                 <audio id="preview-audio" controls style="width: 100%; margin-bottom: 1rem;"></audio>
                 <p id="preview-info" style="color: #666; margin-bottom: 1rem;"></p>
                 <div style="display: flex; gap: 0.5rem;">
-                    <button type="submit" style="background: #28a745; color: white;">✅ Add to List</button>
+                    <button type="submit" style="background: #28a745; color: white;">✅ Lägg till i listan</button>
                     <button type="button" onclick="cancelPreview()" style="background: #6c757d; color: white;">❌
-                        Cancel</button>
+                        Avbryt</button>
                 </div>
                 <input type="hidden" name="converted_file" id="converted-file" />
             </div>
@@ -81,7 +78,13 @@
 <h3 style="margin-top: 2rem;">Clips & Scoring</h3>
 {% if teams %}
 <div class="card" style="margin-bottom: 1rem;">
-    <h4>📊 Current Scoreboard</h4>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <h4 style="margin: 0;">📊 Current Scoreboard</h4>
+        <a href="{{ url_for('routes.list_scoreboard', list_id=lst.id) }}"
+            style="font-size: 0.8rem; color: #007bff; text-decoration: none; padding: 0.25rem 0.5rem; border: 1px solid #007bff; border-radius: 4px;">
+            View Detailed Scoreboard →
+        </a>
+    </div>
     <ul style="margin-bottom: 0.5rem;">
         {% for team in teams %}
         <li style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0;">
@@ -260,15 +263,18 @@
         const urlTab = document.getElementById('url-tab');
 
         if (tab === 'file') {
-            fileForm.style.display = 'block';
+            fileForm.style.display = 'grid';
             urlForm.style.display = 'none';
-            fileTab.style.background = '#007bff';
-            urlTab.style.background = '#6c757d';
+            fileTab.classList.add('active');
+            urlTab.classList.remove('active');
+            // Reset any preview state when switching
+            const previewArea = document.getElementById('preview-area');
+            if (previewArea) previewArea.style.display = 'none';
         } else {
             fileForm.style.display = 'none';
-            urlForm.style.display = 'block';
-            fileTab.style.background = '#6c757d';
-            urlTab.style.background = '#007bff';
+            urlForm.style.display = 'grid';
+            fileTab.classList.remove('active');
+            urlTab.classList.add('active');
         }
     }
 
