@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="grid">
+    <div class="card">
+        <h2>Create list</h2>
+        <form action="/lists" method="post">
+            <label for="name">Name</label>
+            <input type="text" name="name" id="name" required />
+            <label for="description">Description</label>
+            <textarea name="description" id="description" rows="3"></textarea>
+            <button type="submit">Create</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Create team</h2>
+        <form action="/teams" method="post">
+            <label for="team-name">Name</label>
+            <input type="text" name="name" id="team-name" required />
+            <button type="submit">Create</button>
+        </form>
+    </div>
+</div>
+
+<h2 style="margin-top: 2rem;">Lists</h2>
+<div class="grid">
+    {% for lst in lists %}
+    <div class="card">
+        <h3><a href="/lists/{{ lst.id }}">{{ lst.name }}</a></h3>
+        <p>{{ lst.description }}</p>
+        <small>Created {{ lst.created_at }}</small>
+    </div>
+    {% else %}
+    <p>No lists yet.</p>
+    {% endfor %}
+</div>
+
+<h2 style="margin-top: 2rem;">Teams</h2>
+<div class="grid">
+    {% for team in teams %}
+    <div class="card">
+        <h3>{{ team.name }}</h3>
+    </div>
+    {% else %}
+    <p>No teams yet.</p>
+    {% endfor %}
+</div>
+{% endblock %}

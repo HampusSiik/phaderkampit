@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>{{ lst.name }}</h2>
+<p>{{ lst.description }}</p>
+
+<div class="grid" style="margin-top: 1rem;">
+    <div class="card">
+        <h3>Upload clip</h3>
+        <form action="/clips/upload/{{ lst.id }}" method="post" enctype="multipart/form-data">
+            <label for="title">Title</label>
+            <input name="title" id="title" type="text" placeholder="Optional title" />
+            <label for="description">Description</label>
+            <textarea name="description" id="description" rows="3" placeholder="Optional description"></textarea>
+            <label for="file">Audio file</label>
+            <input name="file" id="file" type="file" accept="audio/*" required />
+            <button type="submit">Upload</button>
+        </form>
+    </div>
+</div>
+
+<h3 style="margin-top: 2rem;">Clips</h3>
+<div class="card" style="margin-bottom: 1rem;">
+    <h4>Scoreboard</h4>
+    <ul>
+        {% for team in teams %}
+        <li>{{ team.name }} — {{ team_scores.get(team.id, 0) }} correct</li>
+        {% endfor %}
+    </ul>
+    <small>Scores update when you record answers.</small>
+</div>
+<div class="grid">
+    {% for clip in clips %}
+    <div class="card">
+        <h4>{{ clip.title }}</h4>
+        <p>{{ clip.description }}</p>
+        <audio controls src="/uploads/{{ clip.filename }}"></audio>
+
+        <form action="/answers" method="post" style="margin-top: .75rem;">
+            <input type="hidden" name="clip_id" value="{{ clip.id }}" />
+            <label for="team-{{ clip.id }}">Team</label>
+            <select name="team_id" id="team-{{ clip.id }}" required>
+                <option value="" disabled selected>Choose team</option>
+                {% for team in teams %}
+                <option value="{{ team.id }}">{{ team.name }}</option>
+                {% endfor %}
+            </select>
+            <label>Result</label>
+            <div>
+                <label><input type="radio" name="is_correct" value="true" required /> Correct</label>
+                <label><input type="radio" name="is_correct" value="false" /> Wrong</label>
+            </div>
+            <label for="notes-{{ clip.id }}">Notes</label>
+            <input type="text" name="notes" id="notes-{{ clip.id }}" placeholder="Optional" />
+            <button type="submit">Record</button>
+        </form>
+    </div>
+    {% else %}
+    <p>No clips yet.</p>
+    {% endfor %}
+</div>
+{% endblock %}
