@@ -1,7 +1,22 @@
 import os
+import subprocess
+import tempfile
+import uuid
 from datetime import datetime
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash, send_from_directory
+from urllib.parse import urlparse
+from flask import (
+    Blueprint,
+    current_app,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    send_from_directory,
+    jsonify,
+)
 from werkzeug.utils import secure_filename
+import requests
 from .extensions import db
 from .models import SoundList, SoundClip, Team, Answer
 
@@ -40,7 +55,11 @@ def create_list():
 @bp.route("/lists/<int:list_id>")
 def view_list(list_id):
     lst = SoundList.query.get_or_404(list_id)
-    clips = SoundClip.query.filter_by(list_id=list_id).order_by(SoundClip.created_at.desc()).all()
+    clips = (
+        SoundClip.query.filter_by(list_id=list_id)
+        .order_by(SoundClip.created_at.desc())
+        .all()
+    )
     teams = Team.query.order_by(Team.created_at.desc()).all()
     # Build a simple scoreboard: correct answers per team across this list
     team_scores = {t.id: 0 for t in teams}
@@ -48,7 +67,9 @@ def view_list(list_id):
         for ans in clip.answers:
             if ans.is_correct:
                 team_scores[ans.team_id] = team_scores.get(ans.team_id, 0) + 1
-    return render_template("list.html", lst=lst, clips=clips, teams=teams, team_scores=team_scores)
+    return render_template(
+        "list.html", lst=lst, clips=clips, teams=teams, team_scores=team_scores
+    )
 
 
 @bp.route("/teams", methods=["POST"])
@@ -97,37 +118,444 @@ def upload_clip(list_id):
     return redirect(url_for("routes.view_list", list_id=list_id))
 
 
+@bp.route("/clips/preview-url", methods=["POST"])
+def preview_url():
+    """Preview and convert audio from URL"""
+    try:
+        data = request.get_json()
+        url = data.get("url")
+
+        if not url:
+            return jsonify({"error": "URL is required"}), 400
+
+        # Download the audio file
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+
+        # Get file info
+        parsed_url = urlparse(url)
+        original_filename = os.path.basename(parsed_url.path)
+        if not original_filename:
+            original_filename = "audio"
+
+        # Create temporary file for original
+        temp_dir = tempfile.gettempdir()
+        temp_id = str(uuid.uuid4())
+
+        # Determine file extension from content-type or URL
+        content_type = response.headers.get("content-type", "").lower()
+        if "ogg" in content_type or url.lower().endswith(".ogg"):
+            original_ext = ".ogg"
+        elif "mp3" in content_type or url.lower().endswith(".mp3"):
+            original_ext = ".mp3"
+        elif "wav" in content_type or url.lower().endswith(".wav"):
+            original_ext = ".wav"
+        elif "m4a" in content_type or url.lower().endswith(".m4a"):
+            original_ext = ".m4a"
+        else:
+            original_ext = ".audio"  # fallback
+
+        original_temp_path = os.path.join(temp_dir, f"original_{temp_id}{original_ext}")
+
+        # Save downloaded file
+        with open(original_temp_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+        # Convert to MP3 using ffmpeg directly
+        try:
+            mp3_temp_path = os.path.join(temp_dir, f"converted_{temp_id}.mp3")
+
+            # Use ffmpeg to convert and get info
+            cmd = [
+                "ffmpeg",
+                "-i",
+                original_temp_path,
+                "-vn",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+                "-b:a",
+                "192k",
+                "-f",
+                "mp3",
+                mp3_temp_path,
+                "-y",
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise Exception(f"FFmpeg conversion failed: {result.stderr}")
+
+            # Get audio duration using ffprobe
+            duration_cmd = [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                mp3_temp_path,
+            ]
+            duration_result = subprocess.run(
+                duration_cmd, capture_output=True, text=True
+            )
+            duration = (
+                float(duration_result.stdout.strip())
+                if duration_result.returncode == 0
+                else 0
+            )
+
+            # Create a URL for preview (serve the temp file)
+            preview_url_path = f"/temp-audio/{temp_id}.mp3"
+
+            # Create info file
+            info_path = os.path.join(temp_dir, f"info_{temp_id}.txt")
+            with open(info_path, "w") as f:
+                f.write(
+                    f"{mp3_temp_path}\n{original_filename}\n{original_ext[1:].upper()}"
+                )
+
+            # Calculate file info
+            file_size = os.path.getsize(mp3_temp_path)
+            size_str = (
+                f"{file_size / 1024 / 1024:.1f}MB"
+                if file_size > 1024 * 1024
+                else f"{file_size / 1024:.1f}KB"
+            )
+
+            # Suggest title
+            suggested_title = (
+                original_filename.rsplit(".", 1)[0]
+                if "." in original_filename
+                else original_filename
+            )
+
+            return jsonify(
+                {
+                    "success": True,
+                    "preview_url": preview_url_path,
+                    "temp_file": temp_id,
+                    "duration": f"{duration:.1f}",
+                    "size": size_str,
+                    "original_format": original_ext[1:].upper(),
+                    "suggested_title": suggested_title,
+                }
+            )
+
+        except Exception as e:
+            # Clean up files
+            if os.path.exists(original_temp_path):
+                os.remove(original_temp_path)
+            return jsonify({"error": f"Audio conversion failed: {str(e)}"}), 400
+
+    except requests.RequestException as e:
+        return jsonify({"error": f"Failed to download audio: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Preview failed: {str(e)}"}), 500
+
+
+@bp.route("/temp-audio/<temp_id>")
+def serve_temp_audio(temp_id):
+    """Serve temporary audio files for preview"""
+    temp_dir = tempfile.gettempdir()
+
+    # Read temp file info
+    info_path = os.path.join(temp_dir, f"info_{temp_id.replace('.mp3', '')}.txt")
+    if not os.path.exists(info_path):
+        return "Temp file not found", 404
+
+    try:
+        with open(info_path, "r") as f:
+            mp3_path = f.readline().strip()
+
+        if not os.path.exists(mp3_path):
+            return "Audio file not found", 404
+
+        return send_from_directory(temp_dir, os.path.basename(mp3_path))
+    except Exception as e:
+        return f"Error serving temp file: {str(e)}", 500
+
+
+@bp.route("/clips/upload-url/<int:list_id>", methods=["POST"])
+def upload_clip_from_url(list_id):
+    """Upload clip from converted URL"""
+    lst = SoundList.query.get_or_404(list_id)
+    temp_file_id = request.form.get("converted_file")
+    title = request.form.get("title")
+    description = request.form.get("description")
+
+    if not temp_file_id:
+        flash("No converted file found", "error")
+        return redirect(url_for("routes.view_list", list_id=list_id))
+
+    temp_dir = tempfile.gettempdir()
+
+    # Read temp file info
+    info_path = os.path.join(temp_dir, f"info_{temp_file_id}.txt")
+    if not os.path.exists(info_path):
+        flash("Converted file expired", "error")
+        return redirect(url_for("routes.view_list", list_id=list_id))
+
+    try:
+        with open(info_path, "r") as f:
+            lines = f.readlines()
+            mp3_path = lines[0].strip()
+            original_filename = lines[1].strip()
+            original_format = lines[2].strip()
+
+        if not os.path.exists(mp3_path):
+            flash("Converted file not found", "error")
+            return redirect(url_for("routes.view_list", list_id=list_id))
+
+        # Generate permanent filename
+        filename = secure_filename(
+            f"{datetime.utcnow().timestamp()}_{original_filename}.mp3"
+        )
+        permanent_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+
+        # Move temp file to permanent location
+        import shutil
+
+        shutil.move(mp3_path, permanent_path)
+
+        # Create clip record
+        clip = SoundClip(
+            list_id=lst.id,
+            title=title or original_filename,
+            description=description,
+            filename=filename,
+            original_name=f"{original_filename} (converted from {original_format})",
+            mime_type="audio/mpeg",
+        )
+        db.session.add(clip)
+        db.session.commit()
+
+        # Clean up temp files
+        for temp_file in [
+            info_path,
+            os.path.join(temp_dir, f"original_{temp_file_id}.ogg"),
+            os.path.join(temp_dir, f"original_{temp_file_id}.wav"),
+            os.path.join(temp_dir, f"original_{temp_file_id}.m4a"),
+        ]:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+
+        flash(
+            f"Audio converted and uploaded successfully (from {original_format})",
+            "success",
+        )
+        return redirect(url_for("routes.view_list", list_id=list_id))
+
+    except Exception as e:
+        flash(f"Failed to save converted audio: {str(e)}", "error")
+        return redirect(url_for("routes.view_list", list_id=list_id))
+
+
 @bp.route("/uploads/<path:filename>")
 def serve_upload(filename):
-    return send_from_directory(current_app.config["UPLOAD_FOLDER"], filename)
+    upload_folder = current_app.config["UPLOAD_FOLDER"]
+    # Convert to absolute path to ensure it works regardless of working directory
+    if not os.path.isabs(upload_folder):
+        upload_folder = os.path.abspath(upload_folder)
+
+    file_path = os.path.join(upload_folder, filename)
+    if not os.path.exists(file_path):
+        current_app.logger.warning(f"Requested file not found: {filename}")
+        return "File not found", 404
+
+    return send_from_directory(upload_folder, filename)
 
 
-@bp.route("/answers", methods=["POST"])
-def record_answer():
+@bp.route("/answers/batch", methods=["POST"])
+def record_batch_answers():
     team_id = request.form.get("team_id", type=int)
-    clip_id = request.form.get("clip_id", type=int)
-    is_correct = request.form.get("is_correct") == "true"
-    notes = request.form.get("notes")
+    list_id = request.form.get("list_id", type=int)
 
-    if not team_id or not clip_id:
-        flash("Team and clip required", "error")
+    if not team_id:
+        flash("Team is required for batch recording", "error")
         return redirect(request.referrer or url_for("routes.index"))
 
     team = Team.query.get_or_404(team_id)
-    clip = SoundClip.query.get_or_404(clip_id)
 
-    # Upsert-like behavior: one answer per team+clip
-    existing = Answer.query.filter_by(team_id=team.id, clip_id=clip.id).first()
-    if existing:
-        existing.is_correct = is_correct
-        existing.notes = notes
-        existing.submitted_at = datetime.utcnow()
-        ans = existing
+    # Get all clips for this list
+    if list_id:
+        clips = SoundClip.query.filter_by(list_id=list_id).all()
     else:
-        ans = Answer(team=team, clip=clip, is_correct=is_correct, notes=notes)
-        db.session.add(ans)
+        flash("List is required for batch recording", "error")
+        return redirect(request.referrer or url_for("routes.index"))
+
+    answers_recorded = 0
+    answers_updated = 0
+
+    # Process each clip's answer
+    for clip in clips:
+        # Form field names: clip_<clip_id>_result and clip_<clip_id>_notes
+        result_field = f"clip_{clip.id}_result"
+        notes_field = f"clip_{clip.id}_notes"
+
+        result = request.form.get(result_field)
+        notes = request.form.get(notes_field, "").strip()
+
+        # Skip if no result provided for this clip
+        if not result or result == "skip":
+            continue
+
+        is_correct = result == "correct"
+
+        # Upsert-like behavior: one answer per team+clip
+        existing = Answer.query.filter_by(team_id=team.id, clip_id=clip.id).first()
+        if existing:
+            existing.is_correct = is_correct
+            existing.notes = (
+                notes or existing.notes
+            )  # Keep existing notes if new ones are empty
+            existing.submitted_at = datetime.utcnow()
+            answers_updated += 1
+        else:
+            ans = Answer(team=team, clip=clip, is_correct=is_correct, notes=notes)
+            db.session.add(ans)
+            answers_recorded += 1
+
     db.session.commit()
-    flash("Answer recorded", "success")
+
+    # Provide feedback based on what was recorded
+    if answers_recorded > 0 and answers_updated > 0:
+        flash(
+            f"Batch recording complete: {answers_recorded} new answers recorded, {answers_updated} answers updated for {team.name}",
+            "success",
+        )
+    elif answers_recorded > 0:
+        flash(
+            f"Batch recording complete: {answers_recorded} answers recorded for {team.name}",
+            "success",
+        )
+    elif answers_updated > 0:
+        flash(
+            f"Batch recording complete: {answers_updated} answers updated for {team.name}",
+            "success",
+        )
+    else:
+        flash(
+            "No answers were recorded. Make sure to select results for the clips.",
+            "warning",
+        )
+
     return redirect(request.referrer or url_for("routes.index"))
 
-*** End Patch
+
+@bp.route("/lists/<int:list_id>/delete", methods=["POST"])
+def delete_list(list_id):
+    """Delete an entire list and all its clips/answers"""
+    lst = SoundList.query.get_or_404(list_id)
+
+    # Delete associated files
+    for clip in lst.clips:
+        file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], clip.filename)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError as e:
+                current_app.logger.warning(
+                    f"Failed to delete file {clip.filename}: {e}"
+                )
+
+    # Delete the list (cascade will handle clips and answers)
+    db.session.delete(lst)
+    db.session.commit()
+    flash(f"List '{lst.name}' and all its content has been deleted", "success")
+    return redirect(url_for("routes.index"))
+
+
+@bp.route("/clips/<int:clip_id>/delete", methods=["POST"])
+def delete_clip(clip_id):
+    """Delete a single clip and its answers"""
+    clip = SoundClip.query.get_or_404(clip_id)
+    list_id = clip.list_id
+
+    # Delete the physical file
+    file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], clip.filename)
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            current_app.logger.warning(f"Failed to delete file {clip.filename}: {e}")
+
+    # Delete the clip (cascade will handle answers)
+    db.session.delete(clip)
+    db.session.commit()
+    flash(f"Clip '{clip.title}' has been deleted", "success")
+    return redirect(url_for("routes.view_list", list_id=list_id))
+
+
+@bp.route("/teams/<int:team_id>/delete", methods=["POST"])
+def delete_team(team_id):
+    """Delete a team and all its answers"""
+    team = Team.query.get_or_404(team_id)
+    team_name = team.name
+
+    # Delete the team (cascade will handle answers)
+    db.session.delete(team)
+    db.session.commit()
+    flash(f"Team '{team_name}' and all its scores have been deleted", "success")
+    return redirect(request.referrer or url_for("routes.index"))
+
+
+@bp.route("/lists/<int:list_id>/clear-scores", methods=["POST"])
+def clear_list_scores(list_id):
+    """Clear all scores (answers) for a specific list"""
+    lst = SoundList.query.get_or_404(list_id)
+
+    # Delete all answers for clips in this list
+    clip_ids = [clip.id for clip in lst.clips]
+    if clip_ids:
+        Answer.query.filter(Answer.clip_id.in_(clip_ids)).delete(
+            synchronize_session=False
+        )
+        db.session.commit()
+        flash(f"All scores for list '{lst.name}' have been cleared", "success")
+    else:
+        flash("No scores to clear", "info")
+
+    return redirect(url_for("routes.view_list", list_id=list_id))
+
+
+@bp.route("/teams/<int:team_id>/clear-scores", methods=["POST"])
+def clear_team_scores(team_id):
+    """Clear all scores for a specific team"""
+    team = Team.query.get_or_404(team_id)
+
+    # Delete all answers for this team
+    Answer.query.filter_by(team_id=team_id).delete()
+    db.session.commit()
+    flash(f"All scores for team '{team.name}' have been cleared", "success")
+    return redirect(request.referrer or url_for("routes.index"))
+
+
+@bp.route("/lists/<int:list_id>/teams/<int:team_id>/clear-scores", methods=["POST"])
+def clear_team_list_scores(list_id, team_id):
+    """Clear scores for a specific team on a specific list"""
+    lst = SoundList.query.get_or_404(list_id)
+    team = Team.query.get_or_404(team_id)
+
+    # Delete answers for this team on clips in this list
+    clip_ids = [clip.id for clip in lst.clips]
+    if clip_ids:
+        Answer.query.filter(
+            Answer.team_id == team_id, Answer.clip_id.in_(clip_ids)
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        flash(
+            f"Scores for team '{team.name}' on list '{lst.name}' have been cleared",
+            "success",
+        )
+    else:
+        flash("No scores to clear", "info")
+
+    return redirect(url_for("routes.view_list", list_id=list_id))
