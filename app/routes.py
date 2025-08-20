@@ -212,12 +212,22 @@ def upload_clip(list_id):
         flash("Unsupported file type", "error")
         return redirect(url_for("routes.view_list", list_id=list_id))
 
+    # Check for duplicate title in this list
+    clip_title = title or file.filename
+    existing_clip = SoundClip.query.filter_by(
+        list_id=lst.id, 
+        title=clip_title
+    ).first()
+    
+    if existing_clip:
+        flash(f"Duplicate detected: '{clip_title}' already exists in this list", "error")
+        return redirect(url_for("routes.view_list", list_id=list_id))
+
     filename = secure_filename(f"{datetime.utcnow().timestamp()}_{file.filename}")
     path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
     file.save(path)
 
     # Determine difficulty based on title
-    clip_title = title or file.filename
     difficulty = determine_difficulty(clip_title)
 
     clip = SoundClip(
@@ -439,8 +449,18 @@ def upload_clip_from_url(list_id):
 
         shutil.move(mp3_path, permanent_path)
 
-        # Determine difficulty based on title
+        # Check for duplicate title in this list
         clip_title = title or original_filename
+        existing_clip = SoundClip.query.filter_by(
+            list_id=lst.id, 
+            title=clip_title
+        ).first()
+        
+        if existing_clip:
+            flash(f"Duplicate detected: '{clip_title}' already exists in this list", "error")
+            return redirect(url_for("routes.view_list", list_id=list_id))
+
+        # Determine difficulty based on title
         difficulty = determine_difficulty(clip_title)
         
         # Create clip record
