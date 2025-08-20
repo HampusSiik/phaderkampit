@@ -31,6 +31,112 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def get_difficulty_mapping():
+    """Load difficulty mapping from difficulties.txt file"""
+    mapping = {
+        'easy': [],
+        'medium': [],
+        'hard': []
+    }
+    
+    try:
+        with open('app/difficulties.txt', 'r', encoding='utf-8') as f:
+            current_category = None
+            for line in f:
+                line = line.strip()
+                if line == 'Lätta:':
+                    current_category = 'easy'
+                elif line == 'Mellan:':
+                    current_category = 'medium'
+                elif line == 'Svår:':
+                    current_category = 'hard'
+                elif line and current_category and not line.startswith('✅') and not line.startswith('❌') and not line.startswith('☑️'):
+                    # Extract the title from the line (remove URLs and other info)
+                    title = line.split(',')[0].split('https://')[0].strip()
+                    if title:
+                        mapping[current_category].append(title.lower())
+    except FileNotFoundError:
+        pass  # File doesn't exist, use empty mapping
+    
+    return mapping
+
+
+def determine_difficulty(title):
+    """Determine difficulty based on title using the mapping"""
+    mapping = get_difficulty_mapping()
+    title_lower = title.lower()
+    
+    # Normalize title by removing special characters and extra spaces
+    title_normalized = ' '.join(title_lower.replace('-', ' ').replace('_', ' ').split())
+    
+    # Check for exact matches first
+    for difficulty, titles in mapping.items():
+        for mapped_title in titles:
+            # Normalize mapped title too
+            mapped_normalized = ' '.join(mapped_title.replace('-', ' ').replace('_', ' ').split())
+            
+            if mapped_normalized in title_normalized or title_normalized in mapped_normalized:
+                return difficulty
+    
+    # Check for partial matches with better word matching
+    for difficulty, titles in mapping.items():
+        for mapped_title in titles:
+            # Normalize mapped title
+            mapped_normalized = ' '.join(mapped_title.replace('-', ' ').replace('_', ' ').split())
+            
+            # Split into words and check for significant word matches
+            title_words = set(title_normalized.split())
+            mapped_words = set(mapped_normalized.split())
+            
+            # Check if any significant words match (longer than 3 chars)
+            significant_matches = 0
+            for title_word in title_words:
+                if len(title_word) > 3:
+                    for mapped_word in mapped_words:
+                        if len(mapped_word) > 3:
+                            if title_word in mapped_word or mapped_word in title_word:
+                                significant_matches += 1
+            
+            # If we have at least 2 significant word matches, consider it a match
+            if significant_matches >= 2:
+                return difficulty
+    
+    # Check for single word matches for very specific terms
+    for difficulty, titles in mapping.items():
+        for mapped_title in titles:
+            mapped_normalized = ' '.join(mapped_title.replace('-', ' ').replace('_', ' ').split())
+            
+            # For very specific terms like "widowmaker", "sekiro", "pokemon", etc.
+            for word in title_normalized.split():
+                if len(word) > 4:  # Longer words are more specific
+                    for mapped_word in mapped_normalized.split():
+                        if len(mapped_word) > 4:
+                            if word == mapped_word:
+                                return difficulty
+    
+    # Check for keyword matches (like "pokemon" in any context)
+    # Use word boundaries to avoid false positives
+    # Only use keywords for titles that don't match anything in difficulties.txt
+    keywords = {
+        'easy': ['minecraft', 'roblox', 'cs', 'league', 'valorant', 'mario', 'pac', 'zelda'],
+        'medium': ['dark', 'souls', 'terraria', 'portal', 'tf2', 'fortnite', 'cod'],
+        'hard': ['sekiro', 'widowmaker', 'warframe', 'hearts', 'iron', 'eu4', 'arma', 'titanfall', 'hollowknight', 'kerbal']
+        # Removed 'pokemon' from hard keywords since it's in difficulties.txt
+    }
+    
+    # Split title into words for more precise matching
+    title_words = set(title_normalized.split())
+    
+    for difficulty, keyword_list in keywords.items():
+        for keyword in keyword_list:
+            # Check if the keyword appears as a complete word
+            if keyword in title_words:
+                return difficulty
+    
+    # Default to medium if no match found
+    return 'medium'
+
+
 @bp.route("/")
 def index():
     lists = SoundList.query.order_by(SoundList.created_at.desc()).all()
@@ -61,14 +167,20 @@ def view_list(list_id):
         .all()
     )
     teams = Team.query.order_by(Team.created_at.desc()).all()
+    
     # Build a simple scoreboard: correct answers per team across this list
     team_scores = {t.id: 0 for t in teams}
     for clip in clips:
         for ans in clip.answers:
             if ans.is_correct:
                 team_scores[ans.team_id] = team_scores.get(ans.team_id, 0) + 1
+                
     return render_template(
-        "list.html", lst=lst, clips=clips, teams=teams, team_scores=team_scores
+        "list.html", 
+        lst=lst, 
+        clips=clips, 
+        teams=teams, 
+        team_scores=team_scores
     )
 
 
@@ -104,17 +216,22 @@ def upload_clip(list_id):
     path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
     file.save(path)
 
+    # Determine difficulty based on title
+    clip_title = title or file.filename
+    difficulty = determine_difficulty(clip_title)
+
     clip = SoundClip(
         list_id=lst.id,
-        title=title or file.filename,
+        title=clip_title,
         description=description,
         filename=filename,
         original_name=file.filename,
         mime_type=file.mimetype,
+        difficulty=difficulty,
     )
     db.session.add(clip)
     db.session.commit()
-    flash("Clip uploaded", "success")
+    flash(f"Clip uploaded (Difficulty: {difficulty.title()})", "success")
     return redirect(url_for("routes.view_list", list_id=list_id))
 
 
@@ -322,14 +439,19 @@ def upload_clip_from_url(list_id):
 
         shutil.move(mp3_path, permanent_path)
 
+        # Determine difficulty based on title
+        clip_title = title or original_filename
+        difficulty = determine_difficulty(clip_title)
+        
         # Create clip record
         clip = SoundClip(
             list_id=lst.id,
-            title=title or original_filename,
+            title=clip_title,
             description=description,
             filename=filename,
             original_name=f"{original_filename} (converted from {original_format})",
             mime_type="audio/mpeg",
+            difficulty=difficulty,
         )
         db.session.add(clip)
         db.session.commit()

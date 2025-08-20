@@ -21,6 +21,7 @@ class SoundClip(db.Model):
     filename = db.Column(db.String(255), nullable=False)  # stored file name on disk
     original_name = db.Column(db.String(255), nullable=False)
     mime_type = db.Column(db.String(128), nullable=True)
+    difficulty = db.Column(db.String(20), nullable=True)  # 'easy', 'medium', 'hard'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     list = db.relationship("SoundList", back_populates="clips")
