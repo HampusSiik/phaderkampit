@@ -2,6 +2,8 @@ import os
 import subprocess
 import tempfile
 import uuid
+import random
+import hashlib
 from datetime import datetime
 from urllib.parse import urlparse
 from flask import (
@@ -21,6 +23,31 @@ from .extensions import db
 from .models import SoundList, SoundClip, Team, Answer
 
 
+def deterministic_shuffle(items, seed_source):
+    """
+    Shuffle a list deterministically based on a seed source.
+    The same seed_source will always produce the same order.
+    """
+    if not items:
+        return items
+
+    # Create a deterministic seed from the source content
+    # We'll use the IDs and titles of all clips to create a consistent hash
+    seed_string = ""
+    for item in items:
+        seed_string += f"{item.id}:{item.title}:"
+
+    # Create a hash from the seed string
+    seed = int(hashlib.md5(seed_string.encode()).hexdigest()[:8], 16)
+
+    # Create a copy and shuffle it with the deterministic seed
+    shuffled_items = items.copy()
+    random.seed(seed)
+    random.shuffle(shuffled_items)
+
+    return shuffled_items
+
+
 bp = Blueprint("routes", __name__)
 
 
@@ -33,31 +60,33 @@ def allowed_file(filename: str) -> bool:
 
 def get_difficulty_mapping():
     """Load difficulty mapping from difficulties.txt file"""
-    mapping = {
-        'easy': [],
-        'medium': [],
-        'hard': []
-    }
-    
+    mapping = {"easy": [], "medium": [], "hard": []}
+
     try:
-        with open('app/difficulties.txt', 'r', encoding='utf-8') as f:
+        with open("app/difficulties.txt", "r", encoding="utf-8") as f:
             current_category = None
             for line in f:
                 line = line.strip()
-                if line == 'Lätta:':
-                    current_category = 'easy'
-                elif line == 'Mellan:':
-                    current_category = 'medium'
-                elif line == 'Svår:':
-                    current_category = 'hard'
-                elif line and current_category and not line.startswith('✅') and not line.startswith('❌') and not line.startswith('☑️'):
+                if line == "Lätta:":
+                    current_category = "easy"
+                elif line == "Mellan:":
+                    current_category = "medium"
+                elif line == "Svår:":
+                    current_category = "hard"
+                elif (
+                    line
+                    and current_category
+                    and not line.startswith("✅")
+                    and not line.startswith("❌")
+                    and not line.startswith("☑️")
+                ):
                     # Extract the title from the line (remove URLs and other info)
-                    title = line.split(',')[0].split('https://')[0].strip()
+                    title = line.split(",")[0].split("https://")[0].strip()
                     if title:
                         mapping[current_category].append(title.lower())
     except FileNotFoundError:
         pass  # File doesn't exist, use empty mapping
-    
+
     return mapping
 
 
@@ -65,29 +94,36 @@ def determine_difficulty(title):
     """Determine difficulty based on title using the mapping"""
     mapping = get_difficulty_mapping()
     title_lower = title.lower()
-    
+
     # Normalize title by removing special characters and extra spaces
-    title_normalized = ' '.join(title_lower.replace('-', ' ').replace('_', ' ').split())
-    
+    title_normalized = " ".join(title_lower.replace("-", " ").replace("_", " ").split())
+
     # Check for exact matches first
     for difficulty, titles in mapping.items():
         for mapped_title in titles:
             # Normalize mapped title too
-            mapped_normalized = ' '.join(mapped_title.replace('-', ' ').replace('_', ' ').split())
-            
-            if mapped_normalized in title_normalized or title_normalized in mapped_normalized:
+            mapped_normalized = " ".join(
+                mapped_title.replace("-", " ").replace("_", " ").split()
+            )
+
+            if (
+                mapped_normalized in title_normalized
+                or title_normalized in mapped_normalized
+            ):
                 return difficulty
-    
+
     # Check for partial matches with better word matching
     for difficulty, titles in mapping.items():
         for mapped_title in titles:
             # Normalize mapped title
-            mapped_normalized = ' '.join(mapped_title.replace('-', ' ').replace('_', ' ').split())
-            
+            mapped_normalized = " ".join(
+                mapped_title.replace("-", " ").replace("_", " ").split()
+            )
+
             # Split into words and check for significant word matches
             title_words = set(title_normalized.split())
             mapped_words = set(mapped_normalized.split())
-            
+
             # Check if any significant words match (longer than 3 chars)
             significant_matches = 0
             for title_word in title_words:
@@ -96,16 +132,18 @@ def determine_difficulty(title):
                         if len(mapped_word) > 3:
                             if title_word in mapped_word or mapped_word in title_word:
                                 significant_matches += 1
-            
+
             # If we have at least 2 significant word matches, consider it a match
             if significant_matches >= 2:
                 return difficulty
-    
+
     # Check for single word matches for very specific terms
     for difficulty, titles in mapping.items():
         for mapped_title in titles:
-            mapped_normalized = ' '.join(mapped_title.replace('-', ' ').replace('_', ' ').split())
-            
+            mapped_normalized = " ".join(
+                mapped_title.replace("-", " ").replace("_", " ").split()
+            )
+
             # For very specific terms like "widowmaker", "sekiro", "pokemon", etc.
             for word in title_normalized.split():
                 if len(word) > 4:  # Longer words are more specific
@@ -113,28 +151,48 @@ def determine_difficulty(title):
                         if len(mapped_word) > 4:
                             if word == mapped_word:
                                 return difficulty
-    
+
     # Check for keyword matches (like "pokemon" in any context)
     # Use word boundaries to avoid false positives
     # Only use keywords for titles that don't match anything in difficulties.txt
     keywords = {
-        'easy': ['minecraft', 'roblox', 'cs', 'league', 'valorant', 'mario', 'pac', 'zelda'],
-        'medium': ['dark', 'souls', 'terraria', 'portal', 'tf2', 'fortnite', 'cod'],
-        'hard': ['sekiro', 'widowmaker', 'warframe', 'hearts', 'iron', 'eu4', 'arma', 'titanfall', 'hollowknight', 'kerbal']
+        "easy": [
+            "minecraft",
+            "roblox",
+            "cs",
+            "league",
+            "valorant",
+            "mario",
+            "pac",
+            "zelda",
+        ],
+        "medium": ["dark", "souls", "terraria", "portal", "tf2", "fortnite", "cod"],
+        "hard": [
+            "sekiro",
+            "widowmaker",
+            "warframe",
+            "hearts",
+            "iron",
+            "eu4",
+            "arma",
+            "titanfall",
+            "hollowknight",
+            "kerbal",
+        ],
         # Removed 'pokemon' from hard keywords since it's in difficulties.txt
     }
-    
+
     # Split title into words for more precise matching
     title_words = set(title_normalized.split())
-    
+
     for difficulty, keyword_list in keywords.items():
         for keyword in keyword_list:
             # Check if the keyword appears as a complete word
             if keyword in title_words:
                 return difficulty
-    
+
     # Default to medium if no match found
-    return 'medium'
+    return "medium"
 
 
 @bp.route("/")
@@ -166,21 +224,21 @@ def view_list(list_id):
         .order_by(SoundClip.created_at.desc())
         .all()
     )
+
+    # Apply deterministic shuffle to clips based on list content
+    clips = deterministic_shuffle(clips, clips)
+
     teams = Team.query.order_by(Team.created_at.desc()).all()
-    
+
     # Build a simple scoreboard: correct answers per team across this list
     team_scores = {t.id: 0 for t in teams}
     for clip in clips:
         for ans in clip.answers:
             if ans.is_correct:
                 team_scores[ans.team_id] = team_scores.get(ans.team_id, 0) + 1
-                
+
     return render_template(
-        "list.html", 
-        lst=lst, 
-        clips=clips, 
-        teams=teams, 
-        team_scores=team_scores
+        "list.html", lst=lst, clips=clips, teams=teams, team_scores=team_scores
     )
 
 
@@ -223,12 +281,14 @@ def upload_clip(list_id):
         # Check for duplicate title in this list
         clip_title = title or file.filename
         existing_clip = SoundClip.query.filter_by(
-            list_id=lst.id, 
-            title=clip_title
+            list_id=lst.id, title=clip_title
         ).first()
-        
+
         if existing_clip:
-            flash(f"Duplicate detected: '{clip_title}' already exists in this list", "error")
+            flash(
+                f"Duplicate detected: '{clip_title}' already exists in this list",
+                "error",
+            )
             error_count += 1
             continue
 
@@ -257,7 +317,7 @@ def upload_clip(list_id):
             flash(f"1 clip uploaded (Difficulty: {difficulty.title()})", "success")
         else:
             flash(f"{uploaded_count} clips uploaded successfully", "success")
-    
+
     if error_count > 0:
         flash(f"{error_count} files failed to upload", "error")
 
@@ -471,17 +531,19 @@ def upload_clip_from_url(list_id):
         # Check for duplicate title in this list
         clip_title = title or original_filename
         existing_clip = SoundClip.query.filter_by(
-            list_id=lst.id, 
-            title=clip_title
+            list_id=lst.id, title=clip_title
         ).first()
-        
+
         if existing_clip:
-            flash(f"Duplicate detected: '{clip_title}' already exists in this list", "error")
+            flash(
+                f"Duplicate detected: '{clip_title}' already exists in this list",
+                "error",
+            )
             return redirect(url_for("routes.view_list", list_id=list_id))
 
         # Determine difficulty based on title
         difficulty = determine_difficulty(clip_title)
-        
+
         # Create clip record
         clip = SoundClip(
             list_id=lst.id,
@@ -820,6 +882,10 @@ def list_scoreboard(list_id):
         .order_by(SoundClip.created_at.desc())
         .all()
     )
+
+    # Apply deterministic shuffle to clips based on list content
+    clips = deterministic_shuffle(clips, clips)
+
     teams = Team.query.all()
 
     # Build detailed scoreboard with per-clip results
