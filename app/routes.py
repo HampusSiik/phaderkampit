@@ -200,48 +200,67 @@ def create_team():
 @bp.route("/clips/upload/<int:list_id>", methods=["POST"])
 def upload_clip(list_id):
     lst = SoundList.query.get_or_404(list_id)
-    file = request.files.get("file")
-    title = request.form.get("title") or (file.filename if file else None)
+    files = request.files.getlist("files")
+    title = request.form.get("title")
     description = request.form.get("description")
 
-    if not file or file.filename == "":
-        flash("No file provided", "error")
+    if not files or all(file.filename == "" for file in files):
+        flash("No files provided", "error")
         return redirect(url_for("routes.view_list", list_id=list_id))
 
-    if not allowed_file(file.filename):
-        flash("Unsupported file type", "error")
-        return redirect(url_for("routes.view_list", list_id=list_id))
+    uploaded_count = 0
+    error_count = 0
 
-    # Check for duplicate title in this list
-    clip_title = title or file.filename
-    existing_clip = SoundClip.query.filter_by(
-        list_id=lst.id, 
-        title=clip_title
-    ).first()
+    for file in files:
+        if file.filename == "":
+            continue
+
+        if not allowed_file(file.filename):
+            flash(f"Unsupported file type: {file.filename}", "error")
+            error_count += 1
+            continue
+
+        # Check for duplicate title in this list
+        clip_title = title or file.filename
+        existing_clip = SoundClip.query.filter_by(
+            list_id=lst.id, 
+            title=clip_title
+        ).first()
+        
+        if existing_clip:
+            flash(f"Duplicate detected: '{clip_title}' already exists in this list", "error")
+            error_count += 1
+            continue
+
+        filename = secure_filename(f"{datetime.utcnow().timestamp()}_{file.filename}")
+        path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+        file.save(path)
+
+        # Determine difficulty based on title
+        difficulty = determine_difficulty(clip_title)
+
+        clip = SoundClip(
+            list_id=lst.id,
+            title=clip_title,
+            description=description,
+            filename=filename,
+            original_name=file.filename,
+            mime_type=file.mimetype,
+            difficulty=difficulty,
+        )
+        db.session.add(clip)
+        uploaded_count += 1
+
+    if uploaded_count > 0:
+        db.session.commit()
+        if uploaded_count == 1:
+            flash(f"1 clip uploaded (Difficulty: {difficulty.title()})", "success")
+        else:
+            flash(f"{uploaded_count} clips uploaded successfully", "success")
     
-    if existing_clip:
-        flash(f"Duplicate detected: '{clip_title}' already exists in this list", "error")
-        return redirect(url_for("routes.view_list", list_id=list_id))
+    if error_count > 0:
+        flash(f"{error_count} files failed to upload", "error")
 
-    filename = secure_filename(f"{datetime.utcnow().timestamp()}_{file.filename}")
-    path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
-    file.save(path)
-
-    # Determine difficulty based on title
-    difficulty = determine_difficulty(clip_title)
-
-    clip = SoundClip(
-        list_id=lst.id,
-        title=clip_title,
-        description=description,
-        filename=filename,
-        original_name=file.filename,
-        mime_type=file.mimetype,
-        difficulty=difficulty,
-    )
-    db.session.add(clip)
-    db.session.commit()
-    flash(f"Clip uploaded (Difficulty: {difficulty.title()})", "success")
     return redirect(url_for("routes.view_list", list_id=list_id))
 
 

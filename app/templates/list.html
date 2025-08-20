@@ -42,8 +42,12 @@
             <input name="title" id="title" type="text" placeholder="Valfri titel" />
             <label for="description">Beskrivning</label>
             <textarea name="description" id="description" rows="3" placeholder="Valfri beskrivning"></textarea>
-            <label for="file">Ljudfil 🎵</label>
-            <input name="file" id="file" type="file" accept="audio/*" required />
+            <label for="files">Ljudfil 🎵</label>
+            <input name="files" id="files" type="file" accept="audio/*" multiple required />
+            <div id="file-list" style="display: none; margin-top: 0.5rem; padding: 0.5rem; background: #f8f9fa; border-radius: 4px;">
+                <strong>Selected files:</strong>
+                <ul id="selected-files" style="margin: 0.5rem 0 0 0; padding-left: 1.5rem;"></ul>
+            </div>
             <button type="submit">Ladda upp</button>
         </form>
 
@@ -465,6 +469,25 @@
             form.submit();
         }
     }
+
+    // Multiple file upload handling
+    document.getElementById('files').addEventListener('change', function(e) {
+        const fileList = document.getElementById('file-list');
+        const selectedFiles = document.getElementById('selected-files');
+        
+        if (e.target.files.length > 0) {
+            fileList.style.display = 'block';
+            selectedFiles.innerHTML = '';
+            
+            Array.from(e.target.files).forEach(file => {
+                const li = document.createElement('li');
+                li.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                selectedFiles.appendChild(li);
+            });
+        } else {
+            fileList.style.display = 'none';
+        }
+    });
 </script>
 
 <!-- Quick Actions Footer -->
@@ -476,7 +499,7 @@
     <a href="/">Create Teams</a>
     {% endif %}
     <span class="separator">|</span>
-    <a href="#" onclick="document.getElementById('file').focus(); return false;">Upload More Clips</a>
+    <a href="#" onclick="document.getElementById('files').focus(); return false;">Upload More Clips</a>
     {% if clips and teams %}
     <span class="separator">|</span>
     <a href="#" onclick="document.getElementById('batch-team').focus(); return false;">Record Answers</a>
